@@ -1,4 +1,4 @@
-🔬 PathoSpace: A Unified Framework for WSI Analysis with 2D-SSM
+🔬 PathoSpace: Efficient Self-Supervised 2D Visual State Space Models for Histopathology Image Analysis
 
 PathoSpace is an experimental repository for computational pathology (WSI/Patch level analysis). It integrates self-supervised feature extraction, Multiple Instance Learning (MIL) training, and interpretability analysis into a unified workflow.
 
@@ -76,14 +76,3 @@ Vim4Path: See docs/Vim4Path.md
 DINO: See dino/README.md
 
 CLAM: For data preprocessing pipeline.
-
-📝 Citation
-
-If you use this code for your research, please cite our paper:
-
-@article{li2025pathospace,
-  title={PathoSpace: Efficient Self-Supervised 2D Visual State Space Models for Histopathology Image Analysis},
-  author={Li, Xiangyu and Yang, Haojie and Zhang, Fengyun and Wu, Runzhi and Liu, Liangliang and Su, Ran},
-  journal={Medical Image Analysis},
-  year={2025}
-}
