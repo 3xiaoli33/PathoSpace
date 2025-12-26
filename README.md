@@ -1,32 +1,78 @@
-# PathoSpace
+PathoSpace: A Unified Framework for WSI Analysis with 2D-SSM
 
-PathoSpace 是一个面向计算病理（WSI / Patch）的实验代码仓库，聚合了特征提取、MIL 训练、可解释性热力图与分析脚本。
+PathoSpace is an experimental repository for computational pathology (WSI/Patch level analysis). It integrates self-supervised feature extraction, Multiple Instance Learning (MIL) training, and interpretability analysis into a unified workflow.
 
-本仓库代码包含/改写自多个上游项目（见 `docs/Vim4Path.md` 与各子目录的 `LICENSE*` 文件），主要目录如下：
+The core of this project introduces a 2D-SSM (State Space Model) encoder that resolves spatial discrepancies in histopathology image analysis while maintaining linear computational complexity.
 
-- `dino/`: DINO 预训练与 Vim/Vision-Mamba 相关实现
-- `preprocess/`: WSI -> patch 的预处理与特征准备（基于 CLAM pipeline）
-- `MIL/`: 多实例学习（MIL）训练/评估/热力图（含 ABMIL/CLAM/DTFD/TransMIL 等实现）
-- `generate_camelyon16_heatmaps.py`: 生成 WSI 级热力图（基于 MIL attention/显著性）
-- `generate_analysis_plots.py`: 生成聚类与 long-range distance 等分析图
+(Note: This repository aggregates and adapts code from upstream projects. Please refer to docs/Vim4Path.md and LICENSE files in subdirectories for details.)
 
-## Quickstart
+📂 Directory Structure
 
-> 该仓库依赖 CUDA / PyTorch / OpenSlide 等组件，环境差异较大；建议直接参考 `docs/Vim4Path.md` 的安装与数据处理流程，再按你的本地路径传参运行脚本。
+dino/: Implementation of DINO pre-training combined with Vim/Vision-Mamba architecture.
 
-示例：
+preprocess/: WSI preprocessing pipeline (WSI $\to$ patches) and feature preparation, based on CLAM.
 
-```bash
-# 预训练（示例）
+MIL/: Downstream Multiple Instance Learning frameworks for training and evaluation. Includes implementations of:
+
+ABMIL, CLAM, DTFD-MIL, TransMIL.
+
+generate_camelyon16_heatmaps.py: Script for generating WSI-level heatmaps based on MIL attention/saliency scores.
+
+generate_analysis_plots.py: Tools for generating analysis plots, such as clustering visualizations (t-SNE) and long-range dependency histograms.
+
+🛠️ Installation & Environment
+
+This repository depends on CUDA, PyTorch, and OpenSlide. Due to environmental variations, we recommend referring to docs/Vim4Path.md for detailed installation steps.
+
+Basic setup:
+
+git clone [https://github.com/](https://github.com/)[YourUsername]/PathoSpace.git
+cd PathoSpace
+pip install -r requirements.txt
+
+
+⚡ Quickstart
+
+1. Pre-training (DINO + 2D-SSM)
+
+Train the feature encoder using the DINO framework.
+Note: Adjust nproc_per_node based on your GPU availability.
+
 python -m torch.distributed.launch --nproc_per_node=4 dino/main.py \
-  --data_path /path/to/patches --output_dir checkpoints/exp --arch vim-s --disable_wand
+  --data_path /path/to/patches \
+  --output_dir checkpoints/exp \
+  --arch vim-s \
+  --disable_wandb
 
-# 生成 CAMELYON16 测试集热力图（示例）
+
+2. Downstream MIL Training
+
+Train the slide-level classifier using extracted features.
+
+# Example: Training with TransMIL
+python MIL/main_mil.py --model transmil --feats_dir /path/to/features --split_dir /path/to/splits
+
+
+3. Visualization & Analysis
+
+Generate Heatmaps (CAMELYON16):
+Visualize model attention on whole slide images.
+
 python generate_camelyon16_heatmaps.py --wsi_dir /path/to/CAMELYON16_Test
-```
 
-## Upstream
 
-- Vim4Path: `docs/Vim4Path.md`
-- DINO: `dino/README.md`
+Generate Analysis Plots:
+Create t-SNE clustering and dependency distance plots.
 
+python generate_analysis_plots.py --results_dir /path/to/results
+
+
+📜 Upstream & References
+
+This project builds upon the following excellent open-source works:
+
+Vim4Path: See docs/Vim4Path.md
+
+DINO: See dino/README.md
+
+CLAM: For data preprocessing pipeline.
