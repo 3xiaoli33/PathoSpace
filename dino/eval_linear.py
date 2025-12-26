@@ -27,7 +27,7 @@ from torchvision import models as torchvision_models
 from . import utils
 from .config import configurations
 from .vision_transformer import VisionTransformer
-from .vim.models_mamba import VisionMamba
+VisionMamba = None  # lazy import
 
 import wandb
 from functools import partial
@@ -58,8 +58,9 @@ def eval_linear(args):
         if 'norm_layer' in config and config['norm_layer'] == "nn.LayerNorm":
             config['norm_layer'] = partial(nn.LayerNorm, eps=config['eps'])
         config['drop_path_rate'] = 0  
-        if args.arch.startswith('vim'):
-            model = VisionMamba(return_features=True, **config)
+        if args.arch.startswith('vim') or args.arch == '2dmamba':
+            from .vim.models_mamba import VisionMamba as _VisionMamba
+            model = _VisionMamba(return_features=True, **config)
             embed_dim = model.embed_dim
         elif args.arch.startswith('vit'):
             model = VisionTransformer(**config)
@@ -279,7 +280,7 @@ if __name__ == '__main__':
         help="""Whether ot not to concatenate the global average pooled features to the [CLS] token.
         We typically set this to False for ViT-Small and to True with ViT-Base.""")
     parser.add_argument('--arch', default='vim-t-plus', type=str,
-        choices=['vim-t', 'vim-t-plus', 'vim-s', 'vit-t', 'vit-s'])
+        choices=['vim-t', 'vim-t-plus', 'vim-s', 'vit-t', 'vit-s', '2dmamba'])
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
     parser.add_argument('--image_size', default=224, type=int, help='Image resolution of the model.')
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
@@ -301,7 +302,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_labels', default=2, type=int, help='Number of labels for linear classifier')
     parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
     parser.add_argument('--disable_wandb', action='store_true', help='Disable Weights & Biases logging. Enabled by default.')
+    parser.add_argument('--disable_wand', action='store_true', help='Alias for --disable_wandb')
 
     args = parser.parse_args()
+    if getattr(args, 'disable_wand', False):
+        args.disable_wandb = True
     os.makedirs(args.output_dir, exist_ok=True)
     eval_linear(args)

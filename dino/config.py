@@ -1,10 +1,10 @@
 configurations = {
     "vim-t": {
         "img_size": 224,
-        "patch_size": 16,
+        "patch_size": 64,
         "stride": 16,
         "embed_dim": 192,
-        "depth": 24,
+        "depth": 12,
         "rms_norm": True,
         "attn_drop_rate": 0.0,
         "drop_path_rate": 0.1,
@@ -14,7 +14,7 @@ configurations = {
         "if_abs_pos_embed": True,
         "if_rope": False,
         "if_rope_residual": False,
-        "if_cls_token": True,
+        "if_cls_token": False,
         "if_devide_out": True,
         "use_middle_cls_token": True,
         "bimamba_type": "v2"
@@ -34,7 +34,7 @@ configurations = {
         "if_abs_pos_embed": True,
         "if_rope": False,
         "if_rope_residual": False,
-        "if_cls_token": True,
+        "if_cls_token": False,
         "if_devide_out": True,
         "use_middle_cls_token": True,
         "bimamba_type": "v2"
@@ -44,7 +44,7 @@ configurations = {
         "patch_size": 16,
         "stride": 16,
         "embed_dim": 384,
-        "depth": 24,
+        "depth": 12,
         "rms_norm": True,
         "attn_drop_rate": 0.0,
         "drop_path_rate": 0.1,
@@ -54,7 +54,7 @@ configurations = {
         "if_abs_pos_embed": True,
         "if_rope": False,
         "if_rope_residual": False,
-        "if_cls_token": True,
+        "if_cls_token": False,
         "if_devide_out": True,
         "use_middle_cls_token": True,
         "bimamba_type": "v2"

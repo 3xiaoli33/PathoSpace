@@ -11,14 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
+from pathlib import Path
+
+# Ensure vendored mamba dependency is on sys.path
+mamba_vendor_dir = (Path(__file__).resolve().parent / 'mamba-1p1p1')
+if mamba_vendor_dir.exists():
+    sys.path.insert(0, str(mamba_vendor_dir))
 import argparse
 import os
-import sys
 import datetime
 import time
 import math
 import json
-from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -29,12 +34,10 @@ import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
-import wandb
 from functools import partial
 
 import utils
 from vision_transformer import DINOHead, VisionTransformer
-from vim.models_mamba import VisionMamba
 from config import configurations
 
 # from . import utils
@@ -51,7 +54,7 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument('--arch', default='vim-t-plus', type=str,
-        choices=['vim-t', 'vim-t-plus', 'vim-s', 'vit-t', 'vit-s'])
+        choices=['vim-t', 'vim-t-plus', 'vim-s', 'vit-t', 'vit-s', '2dmamba'])
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
         of input square patches - default 16 (for 16x16 patches). Using smaller
         values leads to better performance but requires more memory. Applies only
@@ -80,7 +83,7 @@ def get_args_parser():
         help='Number of warmup epochs for the teacher temperature (Default: 30).')
 
     # Training/Optimization parameters
-    parser.add_argument('--use_fp16', type=utils.bool_flag, default=True, help="""Whether or not
+    parser.add_argument('--use_fp16', type=utils.bool_flag, default=False, help="""Whether or not
         to use half precision for training. Improves training time and memory requirements,
         but can provoke instability and slight decay of performance. We recommend disabling
         mixed precision if the loss is unstable, if reducing the patch size or if training with bigger ViTs.""")
@@ -92,7 +95,7 @@ def get_args_parser():
     parser.add_argument('--clip_grad', type=float, default=3.0, help="""Maximal parameter
         gradient norm if using gradient clipping. Clipping with norm .3 ~ 1.0 can
         help optimization for larger ViT architectures. 0 for disabling.""")
-    parser.add_argument('--batch_size_per_gpu', default=64, type=int,
+    parser.add_argument('--batch_size_per_gpu', default=256, type=int,
         help='Per-GPU batch-size : number of distinct images loaded on one GPU.')
     parser.add_argument('--epochs', default=100, type=int, help='Number of epochs of training.')
     parser.add_argument('--freeze_last_layer', default=1, type=int, help="""Number of epochs
@@ -113,13 +116,14 @@ def get_args_parser():
     parser.add_argument('--image_size', default=224, type=int, help='Image Size of global views.')
     parser.add_argument('--image_size_down', default=96, type=int, help='Image Size of local views.')
     parser.add_argument('--disable_wandb', action='store_true', help='Disable Weights & Biases logging. Enabled by default.')
+    parser.add_argument('--disable_wand', action='store_true', help='Alias for --disable_wandb')
 
     # Multi-crop parameters
     parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
         help="""Scale range of the cropped image before resizing, relatively to the origin image.
         Used for large global view cropping. When disabling multi-crop (--local_crops_number 0), we
         recommand using a wider range of scale ("--global_crops_scale 0.14 1." for example)""")
-    parser.add_argument('--local_crops_number', type=int, default=8, help="""Number of small
+    parser.add_argument('--local_crops_number', type=int, default=4, help="""Number of small
         local views to generate. Set this parameter to 0 to disable multi-crop training.
         When disabling multi-crop we recommend to use "--global_crops_scale 0.14 1." """)
     parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
@@ -133,7 +137,7 @@ def get_args_parser():
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
     parser.add_argument('--saveckp_freq', default=20, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
-    parser.add_argument('--num_workers', default=4, type=int, help='Number of data loading workers per GPU.')
+    parser.add_argument('--num_workers', default=12, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local-rank", default=0, type=int, help="Please ignore and do not set this argument.")
@@ -145,13 +149,21 @@ def train_dino(args):
     utils.init_distributed_mode(args)
     utils.fix_random_seeds(args.seed)
         
-    if not args.disable_wandb and args.gpu==0:
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project="Vim4Path",
-            # track hyperparameters and run metadata
-            config=args
-        )
+    if not hasattr(args, 'disable_wandb'):
+        args.disable_wandb = False
+
+    if not args.disable_wandb and getattr(args, 'gpu', 0)==0:
+        try:
+            import wandb
+            wandb.init(
+                # set the wandb project where this run will be logged
+                project="Vim4Path",
+                # track hyperparameters and run metadata
+                config=args
+            )
+        except Exception as e:
+            print(f"wandb disabled: {e}")
+            args.disable_wandb = True
 
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
@@ -176,8 +188,8 @@ def train_dino(args):
     print(f"Data loaded: there are {len(dataset)} images.")
 
     # ============ building student and teacher networks ... ============
-    if args.arch in configurations:
-        config = configurations[args.arch]
+    if args.arch in configurations or args.arch == '2dmamba':
+        config = configurations[args.arch] if args.arch != '2dmamba' else configurations['vim-s']
         config['img_size'] = args.image_size
         config['patch_size'] = args.patch_size
         config['num_classes'] = args.num_classes
@@ -188,9 +200,10 @@ def train_dino(args):
             config['norm_layer'] = partial(nn.LayerNorm, eps=config['eps'])
         teacher_config = config.copy()
         teacher_config['drop_path_rate'] = 0  
-        if args.arch.startswith('vim'):
+        if args.arch.startswith('vim') or args.arch == '2dmamba':
+            from vim.models_mamba import VisionMamba
             student = VisionMamba(return_features=True, **config)
-            teacher = VisionMamba(return_features=True, **teacher_config)  
+            teacher = VisionMamba(return_features=True, **teacher_config)
         elif args.arch.startswith('vit'):
             student = VisionTransformer(**config)
             teacher = VisionTransformer(**teacher_config)
@@ -485,6 +498,8 @@ class DataAugmentationDINO(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
+    if getattr(args, 'disable_wand', False):
+        args.disable_wandb = True
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-
+    print("Batch size per GPU:", args.batch_size_per_gpu)
     train_dino(args)

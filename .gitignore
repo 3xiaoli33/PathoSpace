@@ -1,32 +1,46 @@
-output/
-data/
-*ndpi
-*svs
-*csv
-*jpg
-*h5
-*png
-*tar
-*pth
-*txt
-*out
-*pyc
-*out
-*so
-*zip
-*sh
-*pt
-
-dino/causal-conv1d/build/
-checkpoints/
-.ipynb_checkpoints/
+# Python
 __pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
 .idea/
-HIPT/
-#datasets/
-dataset/
-Vim
-.github
+.vscode/
+
+# Builds / packaging
+build/
+dist/
+
+# Training artifacts
+checkpoints/
 wandb/
-MIL/results/
-MIL/results_old/
+output/
+outputs/
+logs/
+
+# Large datasets / slide files / features / weights
+dataset/
+download/
+data/
+clam_data/
+bracs_clam_data/
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.svs
+*.ndpi
+*.tif
+*.tiff
+
+# Compiled wheels / temporary binaries
+*.whl
+*.o
+
+# Embedded upstream clones (avoid accidental submodules)
+dino/mamba/
+dino/causal-conv1d/.github/

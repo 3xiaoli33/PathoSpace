@@ -144,9 +144,9 @@ def train(datasets, cur, args, embedding_dim):
     print('Done!')
 
     print('\nInit Model...', end=' ')
-    model_dict = {"dropout": args.drop_out, 'n_classes': args.n_classes, 'embedding_dim':embedding_dim}
+    model_dict = {"dropout": args.drop_out, 'n_classes': args.n_classes, 'embedding_dim': embedding_dim}
 
-    if args.model_size is not None and args.model_type != 'mil':
+    if args.model_size is not None and args.model_type not in ['mil', 'abmil', 'transmil', 'trans_mil', 'dtfd_mil', 'mhim_mil']:
         model_dict.update({"size_arg": args.model_size})
 
     if args.model_type in ['clam_sb', 'clam_mb']:
@@ -171,13 +171,36 @@ def train(datasets, cur, args, embedding_dim):
         else:
             raise NotImplementedError
 
-    else:  # args.model_type == 'mil'
+    elif args.model_type == 'mil':
         if args.n_classes > 2:
             model = MIL_fc_mc(**model_dict)
         else:
             model = MIL_fc(**model_dict)
 
-    model.relocate()
+    elif args.model_type == 'abmil':
+        from models.abmil import DAttention
+        model = DAttention(in_dim=embedding_dim, n_classes=args.n_classes, dropout=args.drop_out, act='relu')
+
+    elif args.model_type in ['transmil', 'trans_mil']:
+        from models.transmil import TransMIL
+        model = TransMIL(in_dim=embedding_dim, n_classes=args.n_classes, dropout=args.drop_out, act='relu')
+
+    elif args.model_type in ['dtfd_mil', 'dtfd']:
+        from models.dtfd_mil import DTFD_MIL
+        model = DTFD_MIL(in_dim=embedding_dim, n_classes=args.n_classes, dropout=args.drop_out)
+
+    elif args.model_type in ['dsmil']:
+        from models.dsmil import MILNet
+        model = MILNet(in_size=embedding_dim, num_class=args.n_classes, dropout=args.drop_out)
+
+    else:
+        raise NotImplementedError(f"Unknown model_type: {args.model_type}")
+
+    # Relocate to device if model exposes relocate(), else .to(device)
+    if hasattr(model, 'relocate'):
+        model.relocate()
+    else:
+        model = model.to(device)
     print('Done!')
     print_network(model)
 
@@ -288,8 +311,9 @@ def train_loop_clam(epoch, model, loader, optimizer, n_classes, bag_weight, writ
         optimizer.zero_grad()
 
     # calculate loss and error for epoch
-    train_loss /= len(loader)
-    train_error /= len(loader)
+    loader_len = max(len(loader), 1)
+    train_loss /= loader_len
+    train_error /= loader_len
 
     if inst_count > 0:
         train_inst_loss /= inst_count
@@ -345,8 +369,9 @@ def train_loop(epoch, model, loader, optimizer, n_classes, writer=None, loss_fn=
         optimizer.zero_grad()
 
     # calculate loss and error for epoch
-    train_loss /= len(loader)
-    train_error /= len(loader)
+    loader_len = max(len(loader), 1)
+    train_loss /= loader_len
+    train_error /= loader_len
 
     print('Epoch: {}, train_loss: {:.4f}, train_error: {:.4f}'.format(epoch, train_loss, train_error))
     for i in range(n_classes):
@@ -388,8 +413,9 @@ def validate(cur, epoch, model, loader, n_classes, early_stopping=None, writer=N
             error = calculate_error(Y_hat, label)
             val_error += error
 
-    val_error /= len(loader)
-    val_loss /= len(loader)
+    loader_len = max(len(loader), 1)
+    val_error /= loader_len
+    val_loss /= loader_len
 
     if n_classes == 2:
         auc = roc_auc_score(labels, prob[:, 1])

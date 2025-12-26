@@ -53,11 +53,19 @@ def get_split_loader(split_dataset, training = False, testing = False, weighted 
 		return either the validation loader or training loader 
 	"""
 	kwargs = {'num_workers': 4} if device.type == "cuda" else {}
+	dataset_len = len(split_dataset)
+	if dataset_len == 0:
+		return DataLoader(split_dataset, batch_size=1, sampler = SequentialSampler(split_dataset), collate_fn = collate_MIL, **kwargs)
+
 	if not testing:
 		if training:
 			if weighted:
 				weights = make_weights_for_balanced_classes_split(split_dataset)
-				loader = DataLoader(split_dataset, batch_size=1, sampler = WeightedRandomSampler(weights, len(weights)), collate_fn = collate_MIL, **kwargs)	
+				if weights.sum() <= 0:
+					sampler = RandomSampler(split_dataset)
+				else:
+					sampler = WeightedRandomSampler(weights, len(weights))
+				loader = DataLoader(split_dataset, batch_size=1, sampler = sampler, collate_fn = collate_MIL, **kwargs)	
 			else:
 				loader = DataLoader(split_dataset, batch_size=1, sampler = RandomSampler(split_dataset), collate_fn = collate_MIL, **kwargs)
 		else:
@@ -146,11 +154,18 @@ def calculate_error(Y_hat, Y):
 
 def make_weights_for_balanced_classes_split(dataset):
 	N = float(len(dataset))                                           
-	weight_per_class = [N/len(dataset.slide_cls_ids[c]) for c in range(len(dataset.slide_cls_ids))]                                                                                                     
+	weight_per_class = {c: N / len(dataset.slide_cls_ids[c]) if len(dataset.slide_cls_ids[c]) > 0 else 0.0
+	                    for c in range(len(dataset.slide_cls_ids))}
+	active_classes = [c for c, w in weight_per_class.items() if w > 0]
+	if not active_classes:
+		return torch.ones(int(N), dtype=torch.double)
 	weight = [0] * int(N)                                           
 	for idx in range(len(dataset)):   
 		y = dataset.getlabel(idx)                        
-		weight[idx] = weight_per_class[y]                                  
+		class_weight = weight_per_class.get(y, 0.0)
+		if class_weight == 0.0:
+			class_weight = weight_per_class[active_classes[0]]
+		weight[idx] = class_weight                                  
 
 	return torch.DoubleTensor(weight)
 
@@ -163,4 +178,3 @@ def initialize_weights(module):
 		elif isinstance(m, nn.BatchNorm1d):
 			nn.init.constant_(m.weight, 1)
 			nn.init.constant_(m.bias, 0)
-

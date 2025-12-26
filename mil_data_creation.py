@@ -1,5 +1,5 @@
 from dino.vision_transformer import DINOHead, VisionTransformer
-from dino.vim.models_mamba import VisionMamba
+VisionMamba = None  # lazy import
 from dino.config import configurations
 from functools import partial
 
@@ -28,7 +28,7 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument('--arch', default='vim-t-plus', type=str,
-        choices=['vim-t', 'vim-t-plus', 'vim-s', 'vit-t', 'vit-s'])
+        choices=['vim-t', 'vim-t-plus', 'vim-s', 'vit-t', 'vit-s', '2dmamba'])
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
         of input square patches - default 16 (for 16x16 patches). Using smaller
         values leads to better performance but requires more memory. Applies only
@@ -123,7 +123,7 @@ def get_args_parser():
 
 def get_model():
     # args.image_size = 224
-    args.patch_size = 16
+    args.patch_size = 128
     args.num_classes = 2
     args.n_last_blocks = 4
     args.avgpool_patchtokens = False
@@ -137,8 +137,9 @@ def get_model():
         if 'norm_layer' in config and config['norm_layer'] == "nn.LayerNorm":
             config['norm_layer'] = partial(nn.LayerNorm, eps=config['eps'])
         config['drop_path_rate'] = 0
-        if args.arch.startswith('vim'):
-            model = VisionMamba(return_features=True, **config)
+        if args.arch.startswith('vim') or args.arch == '2dmamba':
+            from dino.vim.models_mamba import VisionMamba as _VisionMamba
+            model = _VisionMamba(return_features=True, **config)
             embed_dim = model.embed_dim
         elif args.arch.startswith('vit'):
             model = VisionTransformer(**config)
@@ -151,7 +152,6 @@ def get_model():
 
     model.cuda()
     model.eval()
-    # args.pretrained_weights = '/home/ubuntu/checkpoints/camelyon16_224_10x/vit-s_224-96/checkpoint.pth'
     args.checkpoint_key = 'teacher'
     load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     return model
@@ -170,7 +170,7 @@ def get_feaures(model, inp):
     return output
 
 def compute_w_loader(file_path, output_path, wsi, model,
-    batch_size = 8, verbose = 0, print_every=20, pretrained=True,
+    batch_size = 32, verbose = 0, print_every=20, pretrained=True,
     custom_downsample=1, target_patch_size=-1):
     """
     args:
@@ -186,7 +186,7 @@ def compute_w_loader(file_path, output_path, wsi, model,
     dataset = Whole_Slide_Bag_FP(file_path=file_path, wsi=wsi, pretrained=pretrained,
         custom_downsample=custom_downsample, target_patch_size=target_patch_size)
     x, y = dataset[0]
-    kwargs = {'num_workers': 4, 'pin_memory': True} if device.type == "cuda" else {}
+    kwargs = {'num_workers': 8, 'pin_memory': True} if device.type == "cuda" else {}
     loader = DataLoader(dataset=dataset, batch_size=batch_size, **kwargs, collate_fn=collate_features)
 
     if verbose > 0:
@@ -241,7 +241,7 @@ def process_training(args):
     split = 'training'
 
     print(f"Processing split: {split}")
-    slide_folder = f'/home/ubuntu/Downloads/Camelyon16/{split}/'
+    slide_folder = f'CAMELYON16/{split}/'
     feat_dir = f'{args.output_dir}/{args.image_size}_{args.source_level}at{args.target_level}/{args.arch}/{split}'
     h5_dir = f'dataset/Camelyon16/{split}/{args.image_size}_{args.target_level}x/h5/'
 
@@ -258,7 +258,7 @@ def process_training(args):
 def process_testing(args):
     split = 'testing'
     print(f"Processing split: {split}")
-    slide_folder = f'/home/ubuntu/Downloads/Camelyon16/{split}/'
+    slide_folder = f'CAMELYON16/{split}/'
     feat_dir = f'{args.output_dir}/{args.image_size}_{args.source_level}at{args.target_level}/{args.arch}/{split}'
     h5_dir = f'dataset/Camelyon16/{split}/{args.image_size}_{args.target_level}x/h5/'
 
@@ -266,7 +266,7 @@ def process_testing(args):
     create_data_split(feat_dir, classes, slide_folder, h5_dir)
 
     # create csv
-    df = pd.read_csv('/home/ubuntu/Downloads/Camelyon16/testing/reference.csv', header=None)
+    df = pd.read_csv('CAMELYON16/testing/reference.csv', header=None)
     df = df.drop([2, 3], axis=1)
     df[2] = df[0]
     df = df[[0, 2, 1]]

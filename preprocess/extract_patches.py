@@ -35,8 +35,11 @@ def main(args):
         if args.sample_count>0:
             patch_paths = sorted(glob.glob(os.path.join(args.input_folder, class_name, "patches", "*h5")))[
                           :args.sample_count]
+            # print("patch_paths",patch_paths)
         else:
+            print(args.input_folder, class_name, "patches", "*h5")
             patch_paths = sorted(glob.glob(os.path.join(args.input_folder, class_name, "patches", "*h5")))
+            print("patch_paths",patch_paths)
         total = len(patch_paths)
         progress_bar = tqdm(total=total)
         with Pool(min(cpu_count(), 8)) as p:
